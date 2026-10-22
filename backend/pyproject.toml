@@ -1,0 +1,34 @@
+[project]
+name = "backend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Fanni Kharisma", email = "fannikharisma88@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "cryptography>=50.0.2",
+    "fastapi>=0.159.1",
+    "litellm>=1.106.2",
+    "openpyxl>=3.1.5",
+    "psycopg[binary]>=3.3.6",
+    "pydantic-settings>=2.16.1",
+    "pyjwt>=2.15.1",
+    "sqlalchemy>=2.1.6",
+    "sqlglot>=30.24.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[project.scripts]
+backend = "backend:main"
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+]
