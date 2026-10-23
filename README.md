@@ -59,6 +59,24 @@ npm run dev
 Open http://localhost:3000. `TEST_MODE_LOGIN=true` in the backend `.env` gives
 you local sign-in; it must be `false` anywhere real people use the app.
 
+### Seed local demo data
+
+After the schema is applied, create the local Tenant and sign-in accounts:
+
+```bash
+cd backend
+uv run python -m scripts.seed_local
+```
+
+It is safe to run repeatedly: it only creates missing rows. Never run it at
+startup or against a database with real data.
+
+| Tenant | Email | Role |
+|---|---|---|
+| Northwind Foods | maria@northwind.test | Tenant Admin |
+| Northwind Foods | omar@northwind.test | User |
+| — | platform@chattics.test | Platform Admin |
+
 ## Run tests
 
 The backend suite drives the real HTTP API against the **test** database and
