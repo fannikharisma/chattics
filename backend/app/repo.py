@@ -5,6 +5,7 @@ data takes ``tenant_id`` as its first argument and filters on it inside the
 SQL — including lookups by id and platform-admin paths.
 """
 
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import text
@@ -79,3 +80,28 @@ def ensure_platform_admin(session: Session, full_name: str, email: str) -> UUID:
         ),
         {"full_name": full_name, "email": email},
     ).scalar_one()
+
+
+@dataclass(frozen=True, slots=True)
+class UserRecord:
+    id: UUID
+    tenant_id: UUID | None
+    full_name: str
+    role: str
+    status: str
+
+
+def get_user_for_identity(session: Session, user_id: UUID) -> UserRecord | None:
+    """Load the users row a token points at.
+
+    Identity resolution happens before any Tenant context exists, so this is a
+    deliberately named platform lookup rather than a tenant-scoped query.
+    """
+    row = session.execute(
+        text(
+            "select id, tenant_id, full_name, role, status "
+            "from users where id = :user_id"
+        ),
+        {"user_id": user_id},
+    ).mappings().one_or_none()
+    return UserRecord(**dict(row)) if row is not None else None
