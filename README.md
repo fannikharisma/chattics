@@ -5,9 +5,8 @@ Chart or Dashboard. A Python/FastAPI backend is the only authority; the Next.js
 frontend only renders what the backend returns. App data lives in Supabase
 (Postgres); Tenant business data stays in BigQuery.
 
-The build follows `.scratch/chattics-v1/` (spec, tickets, guides) and
-`docs/adr/`. This README is the command source of truth — keep it current when
-setup, run or test steps change.
+This README is the command source of truth — keep it current when setup, run or
+test steps change.
 
 ## Prerequisites
 

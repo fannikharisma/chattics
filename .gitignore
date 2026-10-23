@@ -17,6 +17,8 @@ node_modules/
 .DS_Store
 
 # Local agent tooling and working notes (never published)
-.opencode/
-.scratch/
-docs/prototypes/
+/.opencode/
+/.scratch/
+/AGENTS.md
+/GLOSSARY.md
+/docs/
