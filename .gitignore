@@ -15,3 +15,8 @@ node_modules/
 
 # OS
 .DS_Store
+
+# Local agent tooling and working notes (never published)
+.opencode/
+.scratch/
+docs/prototypes/
