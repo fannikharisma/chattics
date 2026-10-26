@@ -105,3 +105,61 @@ def get_user_for_identity(session: Session, user_id: UUID) -> UserRecord | None:
         {"user_id": user_id},
     ).mappings().one_or_none()
     return UserRecord(**dict(row)) if row is not None else None
+
+
+@dataclass(frozen=True, slots=True)
+class PublicTenant:
+    id: UUID
+    name: str
+
+
+def get_tenant_status(session: Session, tenant_id: UUID) -> str | None:
+    """Tenant status for sign-in, before any tenant context exists.
+
+    ``tenants`` is the Tenant itself, not tenant-owned data, so this is an
+    explicitly named platform lookup rather than a tenant-scoped query.
+    """
+    return session.execute(
+        text("select status from tenants where id = :tenant_id"),
+        {"tenant_id": tenant_id},
+    ).scalar_one_or_none()
+
+
+def find_user_by_email(
+    session: Session, tenant_id: UUID, email: str
+) -> UserRecord | None:
+    """Look a person up inside one Tenant; the Tenant filter is in the SQL."""
+    row = session.execute(
+        text(
+            "select id, tenant_id, full_name, role, status "
+            "from users "
+            "where tenant_id = :tenant_id and lower(email) = lower(:email)"
+        ),
+        {"tenant_id": tenant_id, "email": email},
+    ).mappings().one_or_none()
+    return UserRecord(**dict(row)) if row is not None else None
+
+
+def find_platform_admin_by_email(session: Session, email: str) -> UserRecord | None:
+    """The one deliberately platform-wide lookup: Platform Admins have no Tenant."""
+    row = session.execute(
+        text(
+            "select id, tenant_id, full_name, role, status "
+            "from users "
+            "where tenant_id is null and role = 'platform_admin' "
+            "and lower(email) = lower(:email)"
+        ),
+        {"email": email},
+    ).mappings().one_or_none()
+    return UserRecord(**dict(row)) if row is not None else None
+
+
+def list_active_tenants_public(session: Session) -> list[PublicTenant]:
+    """Active Tenants only, id + name only — the sign-in dropdown's public read."""
+    rows = session.execute(
+        text(
+            "select id, name from tenants "
+            "where status = 'active' order by lower(name), id"
+        )
+    ).mappings().all()
+    return [PublicTenant(**dict(row)) for row in rows]

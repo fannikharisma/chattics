@@ -5,6 +5,7 @@ state. ``db`` truncates every app table before each test, so this suite must
 only ever point at a disposable database.
 """
 
+import uuid
 from collections.abc import Iterator
 
 import pytest
@@ -18,6 +19,7 @@ from app.config import Settings, get_settings
 from app.connectors.fake import FakeConnector
 from app.db import build_engine, build_session_factory, get_session
 from app.main import app
+from app.repo import ensure_platform_admin, ensure_tenant, ensure_user
 
 _TABLES = (
     "tenants",
@@ -48,7 +50,7 @@ def settings() -> Settings:
     return real.model_copy(
         update={
             "database_url": real.test_database_url,
-            "jwt_secret": "test-jwt-secret",
+            "jwt_secret": "test-jwt-secret-0123456789abcdef",
             "encryption_key": Fernet.generate_key().decode(),
             "test_mode_login": True,
             "environment": "test",
@@ -95,3 +97,56 @@ def client(settings: Settings, db: Session, fake_ai: FakeAI) -> Iterator[TestCli
             yield test_client
     finally:
         app.dependency_overrides.clear()
+
+
+def make_tenant(db: Session, name: str = "Northwind Foods") -> uuid.UUID:
+    """Insert an active Tenant and return its id."""
+    return ensure_tenant(db, name)
+
+
+def make_user(
+    db: Session,
+    tenant_id: uuid.UUID,
+    role: str = "user",
+    email: str | None = None,
+    status: str = "active",
+    full_name: str | None = None,
+) -> uuid.UUID:
+    """Insert a User in a Tenant, optionally deactivated, and return its id."""
+    email = email or f"{role}@northwind.test"
+    if full_name is None:
+        full_name = email.split("@")[0].replace(".", " ").replace("_", " ").title()
+    user_id = ensure_user(db, tenant_id, full_name, email, role)
+    if status != "active":
+        db.execute(
+            text("update users set status = :status where id = :user_id"),
+            {"status": status, "user_id": user_id},
+        )
+    return user_id
+
+
+def make_platform_admin(
+    db: Session,
+    email: str = "platform@chattics.test",
+    status: str = "active",
+) -> uuid.UUID:
+    """Insert a Platform Admin with no Tenant and return its id."""
+    user_id = ensure_platform_admin(db, "Platform Admin", email)
+    if status != "active":
+        db.execute(
+            text("update users set status = :status where id = :user_id"),
+            {"status": status, "user_id": user_id},
+        )
+    return user_id
+
+
+def signin(client: TestClient, tenant: uuid.UUID | str, email: str) -> str:
+    """POST /api/auth/sign-in, assert success, return the token."""
+    response = client.post(
+        "/api/auth/sign-in",
+        json={"tenant": str(tenant), "email": email},
+    )
+    assert response.status_code == 200, response.text
+    token = response.json()["token"]
+    assert token
+    return token
