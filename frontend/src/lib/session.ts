@@ -5,10 +5,13 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { cache } from "react";
 
-import { SESSION_COOKIE } from "./api";
+import { ApiError, SESSION_COOKIE } from "./api";
+import { serverFetch } from "./api.server";
+import type { Me } from "./types";
 
-/** The raw token, or null when the browser has no session cookie. */
+/** Token presence only — the backend validates it on every request. */
 export async function getSession(): Promise<string | null> {
   return (await cookies()).get(SESSION_COOKIE)?.value ?? null;
 }
@@ -19,3 +22,13 @@ export async function requireSession(): Promise<string> {
   if (!token) redirect("/sign-in");
   return token;
 }
+
+/** One /auth/me per request, shared by the layout and the page. */
+export const getMe = cache(async (): Promise<Me> => {
+  try {
+    return await serverFetch<Me>("/auth/me");
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) redirect("/sign-in");
+    throw error;
+  }
+});
