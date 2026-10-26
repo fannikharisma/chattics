@@ -11,6 +11,14 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+##gemini 3.6 flash-task03-01
+from datetime import datetime
+from dataclasses import dataclass
+from uuid import UUID
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+###############################
+
 
 def ping(session: Session) -> None:
     """Round-trip to the database. Raises on a broken connection."""
@@ -163,3 +171,181 @@ def list_active_tenants_public(session: Session) -> list[PublicTenant]:
         )
     ).mappings().all()
     return [PublicTenant(**dict(row)) for row in rows]
+
+#Start of Task 03-01
+@dataclass(frozen=True, slots=True)
+class TenantSummary:
+    """One row of the Platform Admin's Tenants table."""
+
+    id: UUID
+    name: str
+    status: str
+    data_source_state: str
+    user_count: int
+    admin_email: str | None
+    created_at: datetime
+
+
+_TENANT_SUMMARY_SELECT = """
+select
+    t.id,
+    t.name,
+    t.status,
+    coalesce(ds.status, 'not_connected') as data_source_state,
+    (select count(*) from users u where u.tenant_id = t.id) as user_count,
+    admin.email as admin_email,
+    t.created_at
+from tenants t
+left join data_sources ds on ds.tenant_id = t.id
+left join lateral (
+    select u.email
+    from users u
+    where u.tenant_id = t.id and u.role = 'tenant_admin'
+    order by u.created_at, u.id
+    limit 1
+) admin on true
+"""
+
+
+def list_tenants_for_platform_admin(
+    session: Session, search: str | None, status: str
+) -> list[TenantSummary]:
+    """Every Tenant, optionally filtered. ``tenants`` is not tenant-owned data."""
+    search = search.strip() if search else None
+    conditions = ["(:status = 'all' or t.status = :status)"]
+    params: dict[str, object] = {"status": status}
+    if search:
+        conditions.append("(t.name ilike :pattern or admin.email ilike :pattern)")
+        params["pattern"] = f"%{search}%"
+    rows = session.execute(
+        text(
+            _TENANT_SUMMARY_SELECT
+            + " where "
+            + " and ".join(conditions)
+            + " order by lower(t.name), t.id"
+        ),
+        params,
+    ).mappings().all()
+    return [TenantSummary(**dict(row)) for row in rows]
+
+
+def get_tenant_summary(session: Session, tenant_id: UUID) -> TenantSummary | None:
+    row = session.execute(
+        text(_TENANT_SUMMARY_SELECT + " where t.id = :tenant_id"),
+        {"tenant_id": tenant_id},
+    ).mappings().one_or_none()
+    return TenantSummary(**dict(row)) if row is not None else None
+
+
+def create_tenant_with_admin(
+    session: Session, name: str, admin_full_name: str, admin_email: str
+) -> TenantSummary:
+    """Insert Tenant + first Tenant Admin + default settings; the caller commits."""
+    tenant_id = session.execute(
+        text("insert into tenants (name) values (:name) returning id"),
+        {"name": name},
+    ).scalar_one()
+    session.execute(
+        text(
+            "insert into users (tenant_id, full_name, email, role, status) "
+            "values (:tenant_id, :full_name, :email, 'tenant_admin', 'active')"
+        ),
+        {
+            "tenant_id": tenant_id,
+            "full_name": admin_full_name,
+            "email": admin_email,
+        },
+    )
+    session.execute(
+        text(
+            "insert into tenant_settings (tenant_id, maximum_period_days) "
+            "values (:tenant_id, 730)"
+        ),
+        {"tenant_id": tenant_id},
+    )
+    summary = get_tenant_summary(session, tenant_id)
+    if summary is None:
+        raise RuntimeError("Tenant disappeared inside its creation transaction.")
+    return summary
+
+
+def update_tenant(
+    session: Session,
+    tenant_id: UUID,
+    *,
+    name: str | None = None,
+    status: str | None = None,
+) -> None:
+    if name is not None:
+        session.execute(
+            text("update tenants set name = :name where id = :tenant_id"),
+            {"name": name, "tenant_id": tenant_id},
+        )
+    if status is not None:
+        session.execute(
+            text("update tenants set status = :status where id = :tenant_id"),
+            {"status": status, "tenant_id": tenant_id},
+        )
+        if status == "disabled":
+            session.execute(
+                text(
+                    "update users set selected_tenant_id = null "
+                    "where selected_tenant_id = :tenant_id"
+                ),
+                {"tenant_id": tenant_id},
+            )
+
+
+def get_first_tenant_admin_id(session: Session, tenant_id: UUID) -> UUID | None:
+    return session.execute(
+        text(
+            "select id from users "
+            "where tenant_id = :tenant_id and role = 'tenant_admin' "
+            "order by created_at, id limit 1"
+        ),
+        {"tenant_id": tenant_id},
+    ).scalar_one_or_none()
+
+
+def email_taken_in_tenant(
+    session: Session,
+    tenant_id: UUID,
+    email: str,
+    *,
+    exclude_user_id: UUID | None = None,
+) -> bool:
+    sql = (
+        "select 1 from users where tenant_id = :tenant_id "
+        "and lower(email) = lower(:email)"
+    )
+    params: dict[str, object] = {"tenant_id": tenant_id, "email": email}
+    if exclude_user_id is not None:
+        sql += " and id <> :exclude_user_id"
+        params["exclude_user_id"] = exclude_user_id
+    return (
+        session.execute(text(sql + " limit 1"), params).scalar_one_or_none()
+        is not None
+    )
+
+
+def set_tenant_admin_email(
+    session: Session, tenant_id: UUID, email: str, full_name: str
+) -> None:
+    admin_id = get_first_tenant_admin_id(session, tenant_id)
+    if admin_id is None:
+        session.execute(
+            text(
+                "insert into users (tenant_id, full_name, email, role, status) "
+                "values (:tenant_id, :full_name, :email, 'tenant_admin', 'active')"
+            ),
+            {"tenant_id": tenant_id, "full_name": full_name, "email": email},
+        )
+        return
+    session.execute(
+        text(
+            "update users set email = :email "
+            "where tenant_id = :tenant_id and id = :admin_id"
+        ),
+        {"email": email, "tenant_id": tenant_id, "admin_id": admin_id},
+    )
+#End of Task 03-01
