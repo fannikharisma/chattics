@@ -54,12 +54,10 @@ export function AppShell({
   const needsTenant = isPlatformAdmin && tenant === null && !onTenants;
 
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [explanation, setExplanation] = useState<string | null>(
-    tenantDisabled
-      ? "The Tenant you were working in is disabled. Choose another one."
-      : null,
-  );
   const [notice, setNotice] = useState<string | null>(null);
+  const explanation = tenantDisabled
+    ? "The Tenant you were working in is disabled. Choose another one."
+    : null;
   const pickerVisible = pickerOpen || needsTenant;
 
   useEffect(() => {
@@ -79,7 +77,6 @@ export function AppShell({
   const handleSelected = useCallback(
     (name: string) => {
       setPickerOpen(false);
-      setExplanation(null);
       setNotice(
         `Data Source, Model, Semantic Layer, Users and Query Log now use ${name}.`,
       );
@@ -107,7 +104,6 @@ export function AppShell({
   }
 
   function openPicker() {
-    setExplanation(null);
     setPickerOpen(true);
   }
 
