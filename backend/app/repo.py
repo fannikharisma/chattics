@@ -97,6 +97,7 @@ class UserRecord:
     full_name: str
     role: str
     status: str
+    selected_tenant_id: UUID | None
 
 
 def get_user_for_identity(session: Session, user_id: UUID) -> UserRecord | None:
@@ -107,7 +108,7 @@ def get_user_for_identity(session: Session, user_id: UUID) -> UserRecord | None:
     """
     row = session.execute(
         text(
-            "select id, tenant_id, full_name, role, status "
+            "select id, tenant_id, full_name, role, status, selected_tenant_id "
             "from users where id = :user_id"
         ),
         {"user_id": user_id},
@@ -133,13 +134,61 @@ def get_tenant_status(session: Session, tenant_id: UUID) -> str | None:
     ).scalar_one_or_none()
 
 
+@dataclass(frozen=True, slots=True)
+class TenantRecord:
+    id: UUID
+    name: str
+    status: str
+
+
+def get_tenant(session: Session, tenant_id: UUID) -> TenantRecord | None:
+    """Load one Tenant for identity/context resolution.
+
+    ``tenants`` is the Tenant itself, not tenant-owned data, so this is an
+    explicitly named platform lookup rather than a tenant-scoped query.
+    """
+    row = session.execute(
+        text("select id, name, status from tenants where id = :tenant_id"),
+        {"tenant_id": tenant_id},
+    ).mappings().one_or_none()
+    return TenantRecord(**dict(row)) if row is not None else None
+
+
+def set_selected_tenant(
+    session: Session, platform_admin_id: UUID, tenant_id: UUID
+) -> None:
+    """Point a Platform Admin at a Tenant. The caller commits.
+
+    Only a Platform Admin row (no Tenant of its own) may hold a selection, so
+    the role check is part of the SQL.
+    """
+    session.execute(
+        text(
+            "update users set selected_tenant_id = :tenant_id "
+            "where id = :user_id and role = 'platform_admin' and tenant_id is null"
+        ),
+        {"tenant_id": tenant_id, "user_id": platform_admin_id},
+    )
+
+
+def clear_selected_tenant(session: Session, user_id: UUID) -> None:
+    """Forget a Platform Admin's Selected Tenant. The caller commits."""
+    session.execute(
+        text(
+            "update users set selected_tenant_id = null "
+            "where id = :user_id and role = 'platform_admin'"
+        ),
+        {"user_id": user_id},
+    )
+
+
 def find_user_by_email(
     session: Session, tenant_id: UUID, email: str
 ) -> UserRecord | None:
     """Look a person up inside one Tenant; the Tenant filter is in the SQL."""
     row = session.execute(
         text(
-            "select id, tenant_id, full_name, role, status "
+            "select id, tenant_id, full_name, role, status, selected_tenant_id "
             "from users "
             "where tenant_id = :tenant_id and lower(email) = lower(:email)"
         ),
@@ -152,7 +201,7 @@ def find_platform_admin_by_email(session: Session, email: str) -> UserRecord | N
     """The one deliberately platform-wide lookup: Platform Admins have no Tenant."""
     row = session.execute(
         text(
-            "select id, tenant_id, full_name, role, status "
+            "select id, tenant_id, full_name, role, status, selected_tenant_id "
             "from users "
             "where tenant_id is null and role = 'platform_admin' "
             "and lower(email) = lower(:email)"

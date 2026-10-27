@@ -15,7 +15,13 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.errors import AppError
-from app.repo import UserRecord, get_user_for_identity
+from app.repo import (
+    TenantRecord,
+    UserRecord,
+    clear_selected_tenant,
+    get_tenant,
+    get_user_for_identity,
+)
 
 _ALGORITHM = "HS256"
 _TOKEN_LIFETIME = timedelta(hours=12)
@@ -28,6 +34,14 @@ def _invalid_session() -> AppError:
 
 def _forbidden() -> AppError:
     return AppError("forbidden", "You do not have access to this page.", 403)
+
+
+def _no_selected_tenant() -> AppError:
+    return AppError(
+        "no_selected_tenant",
+        "Choose the Tenant you want to work in first.",
+        409,
+    )
 
 
 def create_token(user_id: UUID, settings: Settings | None = None) -> str:
@@ -78,6 +92,47 @@ def get_current_identity(
     if user is None or user.status != "active":
         raise _invalid_session()
     return user
+
+
+def get_tenant_context(
+    identity: UserRecord = Depends(get_current_identity),
+    session: Session = Depends(get_session),
+) -> TenantRecord:
+    """The Tenant this request acts in.
+
+    A Platform Admin acts inside their Selected Tenant; everyone else inside
+    their own. This is the only place that distinction exists, so every
+    tenant-scoped endpoint depends on it and passes its ``id`` to ``repo``.
+    A missing selection is a conflict, a disabled Tenant is forbidden.
+    """
+    if identity.role == "platform_admin":
+        if identity.selected_tenant_id is None:
+            raise _no_selected_tenant()
+        tenant = get_tenant(session, identity.selected_tenant_id)
+        if tenant is None:
+            clear_selected_tenant(session, identity.id)
+            session.commit()
+            raise _no_selected_tenant()
+        if tenant.status != "active":
+            clear_selected_tenant(session, identity.id)
+            session.commit()
+            raise AppError(
+                "tenant_disabled",
+                "This Tenant is disabled. Choose another Tenant to work in.",
+                403,
+            )
+        return tenant
+
+    if identity.tenant_id is None:
+        raise _forbidden()
+    tenant = get_tenant(session, identity.tenant_id)
+    if tenant is None or tenant.status != "active":
+        raise AppError(
+            "tenant_disabled",
+            "This Tenant is disabled. Ask the Platform Admin to re-enable it.",
+            403,
+        )
+    return tenant
 
 
 def require_platform_admin(
