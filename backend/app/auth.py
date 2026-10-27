@@ -94,25 +94,22 @@ def get_current_identity(
     return user
 
 
-def get_tenant_context(
-    identity: UserRecord = Depends(get_current_identity),
-    session: Session = Depends(get_session),
-) -> TenantRecord:
-    """The Tenant this request acts in.
-
-    A Platform Admin acts inside their Selected Tenant; everyone else inside
-    their own. This is the only place that distinction exists, so every
-    tenant-scoped endpoint depends on it and passes its ``id`` to ``repo``.
-    A missing selection is a conflict, a disabled Tenant is forbidden.
-    """
+def _resolve_tenant_context(
+    identity: UserRecord, session: Session, *, require_selection: bool
+) -> TenantRecord | None:
+    """The one place "Platform Admin in a Tenant" differs from "own Tenant"."""
     if identity.role == "platform_admin":
         if identity.selected_tenant_id is None:
-            raise _no_selected_tenant()
+            if require_selection:
+                raise _no_selected_tenant()
+            return None
         tenant = get_tenant(session, identity.selected_tenant_id)
         if tenant is None:
             clear_selected_tenant(session, identity.id)
             session.commit()
-            raise _no_selected_tenant()
+            if require_selection:
+                raise _no_selected_tenant()
+            return None
         if tenant.status != "active":
             clear_selected_tenant(session, identity.id)
             session.commit()
@@ -133,6 +130,30 @@ def get_tenant_context(
             403,
         )
     return tenant
+
+
+def get_tenant_context(
+    identity: UserRecord = Depends(get_current_identity),
+    session: Session = Depends(get_session),
+) -> TenantRecord:
+    """The Tenant a tenant-scoped request acts in.
+
+    A Platform Admin acts inside their Selected Tenant; everyone else inside
+    their own. Every tenant-scoped endpoint depends on this and passes its
+    ``id`` to ``repo``. A missing selection is a conflict, a disabled Tenant
+    is forbidden.
+    """
+    tenant = _resolve_tenant_context(identity, session, require_selection=True)
+    if tenant is None:  # require_selection guarantees a Tenant
+        raise _no_selected_tenant()
+    return tenant
+
+
+def get_optional_tenant_context(
+    identity: UserRecord, session: Session
+) -> TenantRecord | None:
+    """The Tenant shown by /api/context; a Platform Admin may have none yet."""
+    return _resolve_tenant_context(identity, session, require_selection=False)
 
 
 def require_platform_admin(

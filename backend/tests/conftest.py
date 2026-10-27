@@ -150,3 +150,30 @@ def signin(client: TestClient, tenant: uuid.UUID | str, email: str) -> str:
     token = response.json()["token"]
     assert token
     return token
+
+
+def signin_as(db: Session, client: TestClient, user_id: uuid.UUID) -> str:
+    """Sign in as an existing User row, choosing Platform for a Platform Admin."""
+    row = db.execute(
+        text("select tenant_id, email, role from users where id = :user_id"),
+        {"user_id": user_id},
+    ).mappings().one()
+    selector = "platform" if row["role"] == "platform_admin" else row["tenant_id"]
+    return signin(client, selector, row["email"])
+
+
+def auth(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def set_selected_tenant(
+    client: TestClient, token: str, tenant_id: uuid.UUID
+) -> dict:
+    """PUT /api/context/tenant, assert success, return the new context."""
+    response = client.put(
+        "/api/context/tenant",
+        json={"tenant_id": str(tenant_id)},
+        headers=auth(token),
+    )
+    assert response.status_code == 200, response.text
+    return response.json()

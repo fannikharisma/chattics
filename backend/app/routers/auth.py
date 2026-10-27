@@ -17,6 +17,7 @@ from app.auth import create_token, get_current_identity
 from app.config import Settings, get_settings
 from app.db import get_session
 from app.errors import AppError
+from app.menus import Role, menus_for_role
 from app.repo import (
     UserRecord,
     find_platform_admin_by_email,
@@ -25,24 +26,6 @@ from app.repo import (
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-
-Role = Literal["platform_admin", "tenant_admin", "user"]
-
-_MENUS_BY_ROLE: dict[str, list[str]] = {
-    "platform_admin": ["Conversations", "Tenants"],
-    "tenant_admin": [
-        "Conversations",
-        "Datasets",
-        "Charts",
-        "Dashboards",
-        "Data Source",
-        "Model settings",
-        "Semantic Layer",
-        "Users",
-        "Query Log",
-    ],
-    "user": ["Conversations", "Datasets", "Charts", "Dashboards"],
-}
 
 _UNKNOWN_EMAIL_MESSAGE = (
     "No user with this email in that Tenant. "
@@ -79,11 +62,6 @@ def _user_response(user: UserRecord) -> UserResponse:
         role=cast(Role, user.role),
         tenant_id=user.tenant_id,
     )
-
-
-def menus_for_role(role: str) -> list[str]:
-    """The backend's Menu list; the frontend renders this, not its own copy."""
-    return list(_MENUS_BY_ROLE.get(role, []))
 
 
 def _unknown_email() -> AppError:

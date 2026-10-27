@@ -8,12 +8,13 @@ from sqlalchemy.orm import Session
 from app import repo
 from app.db import get_session
 from app.errors import AppError, register_error_handlers
-from app.routers import auth, tenants
+from app.routers import auth, context, tenants
 
 app = FastAPI(title="Chattics API")
 
 register_error_handlers(app)
 app.include_router(auth.router)
+app.include_router(context.router)
 app.include_router(tenants.router)
 
 app.add_middleware(
