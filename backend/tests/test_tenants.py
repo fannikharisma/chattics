@@ -309,6 +309,10 @@ class TestDisableReEnable:
         assert sign_res.status_code == 403
         body = sign_res.json()
         assert body["error"]["code"] == "tenant_disabled"
+        assert body["error"]["message"] == (
+            "This Tenant is disabled. Ask the Platform Admin to re-enable it."
+        )
+        assert "token" not in body
 
     def test_reenable_restores_sign_in(
         self, client: TestClient, db: Session

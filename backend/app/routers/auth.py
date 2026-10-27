@@ -106,7 +106,7 @@ def _resolve_user(
         if status is not None and status != "active":
             raise AppError(
                 "tenant_disabled",
-                "This Tenant is disabled. Ask the Platform Admin to enable it.",
+                "This Tenant is disabled. Ask the Platform Admin to re-enable it.",
                 403,
             )
         user = find_user_by_email(session, tenant, email)
