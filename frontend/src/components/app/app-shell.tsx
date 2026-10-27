@@ -1,15 +1,20 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LogOut, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
+import { TenantPicker } from "@/components/app/tenant-picker";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
+import {
+  TENANT_SELECTED_EVENT,
+  type TenantSelectedDetail,
+} from "@/lib/context-events";
 import { menuHref, roleLabel } from "@/lib/menus";
 import { cn } from "@/lib/utils";
-import type { User } from "@/lib/types";
+import type { ContextIdentity, ContextTenant } from "@/lib/types";
 
 const SIDEBAR_KEY = "chattics.sidebar";
 
@@ -23,20 +28,45 @@ function initials(name: string): string {
 }
 
 type AppShellProps = {
-  user: User;
+  identity: ContextIdentity;
+  tenant: ContextTenant | null;
   menus: string[];
+  tenantDisabled: boolean;
   children: ReactNode;
 };
 
-export function AppShell({ user, menus, children }: AppShellProps) {
+export function AppShell({
+  identity,
+  tenant,
+  menus,
+  tenantDisabled,
+  children,
+}: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState(false);
 
+  const isPlatformAdmin = identity.role === "platform_admin";
+  // Tenants is the one Menu a Platform Admin can use without a selection.
+  const onTenants = pathname === "/tenants" || pathname.startsWith("/tenants/");
+  const needsTenant = isPlatformAdmin && tenant === null && !onTenants;
+
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [explanation, setExplanation] = useState<string | null>(
+    tenantDisabled
+      ? "The Tenant you were working in is disabled. Choose another one."
+      : null,
+  );
+  const [notice, setNotice] = useState<string | null>(null);
+  const pickerVisible = pickerOpen || needsTenant;
+
   useEffect(() => {
     const stored = window.localStorage.getItem(SIDEBAR_KEY);
+    // The stored preference only exists in the browser; reading it during
+    // hydration would disagree with the server-rendered closed sidebar.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOpen(
       stored === "shown"
         ? true
@@ -46,12 +76,39 @@ export function AppShell({ user, menus, children }: AppShellProps) {
     );
   }, []);
 
+  const handleSelected = useCallback(
+    (name: string) => {
+      setPickerOpen(false);
+      setExplanation(null);
+      setNotice(
+        `Data Source, Model, Semantic Layer, Users and Query Log now use ${name}.`,
+      );
+      router.refresh();
+    },
+    [router],
+  );
+
+  useEffect(() => {
+    function onTenantSelected(event: Event) {
+      const detail = (event as CustomEvent<TenantSelectedDetail>).detail;
+      if (detail?.name) handleSelected(detail.name);
+    }
+    window.addEventListener(TENANT_SELECTED_EVENT, onTenantSelected);
+    return () =>
+      window.removeEventListener(TENANT_SELECTED_EVENT, onTenantSelected);
+  }, [handleSelected]);
+
   function toggleSidebar() {
     setOpen((current) => {
       const next = !current;
       window.localStorage.setItem(SIDEBAR_KEY, next ? "shown" : "hidden");
       return next;
     });
+  }
+
+  function openPicker() {
+    setExplanation(null);
+    setPickerOpen(true);
   }
 
   async function signOut() {
@@ -101,6 +158,43 @@ export function AppShell({ user, menus, children }: AppShellProps) {
           </Button>
         </div>
 
+        {isPlatformAdmin && (
+          <div className="px-3 pb-2 pt-3">
+            {tenant ? (
+              <>
+                <p className="px-2 text-sm text-muted-foreground">
+                  Working in{" "}
+                  <span className="font-medium text-foreground">
+                    {tenant.name}
+                  </span>{" "}
+                  <button
+                    type="button"
+                    onClick={openPicker}
+                    className="text-primary underline underline-offset-2"
+                  >
+                    Change
+                  </button>
+                </p>
+                <p className="mt-1 px-2 text-meta text-muted-foreground">
+                  Data Source, Model, Semantic Layer, Users and Query Log use
+                  this Tenant.
+                </p>
+              </>
+            ) : (
+              <p className="px-2 text-sm text-muted-foreground">
+                No Tenant selected.{" "}
+                <button
+                  type="button"
+                  onClick={openPicker}
+                  className="text-primary underline underline-offset-2"
+                >
+                  Choose
+                </button>
+              </p>
+            )}
+          </div>
+        )}
+
         <nav aria-label="Menu" className="flex-1 px-3 py-4">
           <p className="px-2 pb-2 text-xs font-medium text-muted-foreground">
             Menu
@@ -136,14 +230,14 @@ export function AppShell({ user, menus, children }: AppShellProps) {
               aria-hidden="true"
               className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-secondary text-sm font-semibold text-secondary-foreground"
             >
-              {initials(user.full_name)}
+              {initials(identity.full_name)}
             </span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium text-foreground">
-                {user.full_name}
+                {identity.full_name}
               </p>
               <p className="truncate text-meta text-muted-foreground">
-                {roleLabel(user.role)}
+                {roleLabel(identity.role)}
               </p>
             </div>
             <Button
@@ -187,9 +281,25 @@ export function AppShell({ user, menus, children }: AppShellProps) {
           id="main"
           className="min-w-0 flex-1 px-4 py-6 md:px-6 lg:px-8"
         >
+          {notice && (
+            <p
+              role="status"
+              className="mx-auto mb-4 w-full max-w-[1000px] rounded-control bg-secondary px-3 py-2 text-sm text-secondary-foreground"
+            >
+              {notice}
+            </p>
+          )}
           {children}
         </main>
       </div>
+
+      <TenantPicker
+        open={pickerVisible}
+        blocking={needsTenant}
+        explanation={explanation}
+        onOpenChange={setPickerOpen}
+        onSelected={handleSelected}
+      />
     </div>
   );
 }

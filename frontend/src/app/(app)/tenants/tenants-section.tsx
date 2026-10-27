@@ -12,7 +12,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { serverFetch } from "@/lib/api.server";
-import { monthYear } from "@/lib/format";
 import type { Tenant } from "@/lib/types";
 
 import { TenantsFilters } from "./tenants-filters";
@@ -42,8 +41,10 @@ async function loadCreated(id: string): Promise<Tenant | null> {
 
 export async function TenantsSection({
   searchParams,
+  currentTenantId,
 }: {
   searchParams: TenantsSearchParams;
+  currentTenantId: string | null;
 }) {
   const params = await searchParams;
   const search = first(params.search).trim();
@@ -130,7 +131,10 @@ export async function TenantsSection({
                     </StatusChip>
                   </TableCell>
                   <TableCell>
-                    <TenantRowActions tenant={tenant} />
+                    <TenantRowActions
+                      tenant={tenant}
+                      currentTenantId={currentTenantId}
+                    />
                   </TableCell>
                 </TableRow>
               ))}

@@ -2,7 +2,7 @@ import { Suspense } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { getMe } from "@/lib/session";
+import { getContext } from "@/lib/session";
 
 export default function ConversationsPage() {
   return (
@@ -43,8 +43,9 @@ function GreetingFallback() {
 }
 
 async function Greeting() {
-  const me = await getMe();
-  const firstName = me.user.full_name.split(" ")[0] || me.user.full_name;
+  const { context } = await getContext();
+  const firstName =
+    context.identity.full_name.split(" ")[0] || context.identity.full_name;
 
   return (
     <h1 className="text-3xl font-semibold tracking-tight text-foreground">

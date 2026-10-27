@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { PageHeader } from "@/components/app/page-header";
 import { buttonClasses } from "@/components/ui/button";
-import { getMe } from "@/lib/session";
+import { getContext } from "@/lib/session";
 
 import { NewTenantButton } from "./new-tenant-button";
 import { TenantsSection } from "./tenants-section";
@@ -38,9 +38,9 @@ async function TenantsAccess({
 }: {
   searchParams: TenantsSearchParams;
 }) {
-  const me = await getMe();
+  const { context } = await getContext();
 
-  if (me.user.role !== "platform_admin") {
+  if (context.identity.role !== "platform_admin") {
     return (
       <div className="mx-auto w-full max-w-[680px] py-16">
         <h1 className="text-3xl font-semibold tracking-tight text-foreground">
@@ -59,7 +59,12 @@ async function TenantsAccess({
     );
   }
 
-  return <TenantsSection searchParams={searchParams} />;
+  return (
+    <TenantsSection
+      searchParams={searchParams}
+      currentTenantId={context.tenant?.id ?? null}
+    />
+  );
 }
 
 function TenantsFallback() {

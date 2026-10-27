@@ -28,9 +28,16 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ApiError, apiFetch } from "@/lib/api";
+import { announceTenantSelected } from "@/lib/context-events";
 import { monthYear } from "@/lib/format";
-import type { Tenant } from "@/lib/types";
+import type { Context, Tenant } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const EMAIL_MESSAGE =
@@ -48,13 +55,21 @@ const schema = z.object({
 
 type Values = z.infer<typeof schema>;
 
-export function TenantRowActions({ tenant }: { tenant: Tenant }) {
+export function TenantRowActions({
+  tenant,
+  currentTenantId,
+}: {
+  tenant: Tenant;
+  currentTenantId: string | null;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [pending, setPending] = useState<Values | null>(null);
   const [saving, setSaving] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [workError, setWorkError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -120,6 +135,26 @@ export function TenantRowActions({ tenant }: { tenant: Tenant }) {
     }
   }
 
+  async function workInTenant() {
+    setWorking(true);
+    setWorkError(null);
+    try {
+      await apiFetch<Context>("/context/tenant", {
+        method: "PUT",
+        body: JSON.stringify({ tenant_id: tenant.id }),
+      });
+      announceTenantSelected(tenant.name);
+    } catch (error) {
+      setWorkError(
+        error instanceof ApiError
+          ? error.message
+          : "That Tenant could not be selected. Please try again.",
+      );
+    } finally {
+      setWorking(false);
+    }
+  }
+
   async function onSubmit(values: Values) {
     if (values.status === "disabled" && tenant.status !== "disabled") {
       setPending(values);
@@ -150,17 +185,46 @@ export function TenantRowActions({ tenant }: { tenant: Tenant }) {
   const nameError = form.formState.errors.name?.message;
   const emailError = form.formState.errors.admin_email?.message;
 
+  const workAction =
+    currentTenantId === tenant.id ? (
+      <StatusChip tone="info">Working here</StatusChip>
+    ) : tenant.status === "active" ? (
+      <Button
+        variant="secondary"
+        onClick={() => void workInTenant()}
+        disabled={working}
+      >
+        {working ? "Opening…" : "Work in this Tenant"}
+      </Button>
+    ) : (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span tabIndex={0} className="inline-flex rounded-control">
+              <Button variant="secondary" disabled>
+                Work in this Tenant
+              </Button>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>This Tenant is disabled.</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+
   return (
     <>
-      <div className="flex justify-end gap-2">
-        <Button variant="secondary" onClick={openDetails}>
-          Details
-        </Button>
-        <span title="Coming in the next ticket" className="inline-flex">
-          <Button variant="secondary" disabled>
-            Work in this Tenant
+      <div className="flex flex-col items-end gap-1">
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={openDetails}>
+            Details
           </Button>
-        </span>
+          {workAction}
+        </div>
+        {workError && (
+          <p role="alert" className="text-meta text-destructive">
+            {workError}
+          </p>
+        )}
       </div>
 
       <Sheet open={open} onOpenChange={setOpen}>
@@ -182,6 +246,11 @@ export function TenantRowActions({ tenant }: { tenant: Tenant }) {
           </SheetHeader>
 
           <SheetBody>
+            {workError && !editing && (
+              <p role="alert" className="mb-4 text-sm text-destructive">
+                {workError}
+              </p>
+            )}
             {editing ? (
               <form
                 id="edit-tenant"
@@ -323,11 +392,7 @@ export function TenantRowActions({ tenant }: { tenant: Tenant }) {
                 >
                   Edit details
                 </Button>
-                <span title="Coming in the next ticket" className="inline-flex">
-                  <Button variant="secondary" disabled>
-                    Work in this Tenant
-                  </Button>
-                </span>
+                {workAction}
               </>
             )}
           </SheetFooter>

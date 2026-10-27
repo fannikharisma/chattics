@@ -10,11 +10,17 @@ export const Dialog = DialogPrimitive.Root;
 export const DialogTrigger = DialogPrimitive.Trigger;
 export const DialogClose = DialogPrimitive.Close;
 
+type DialogContentProps = ComponentProps<typeof DialogPrimitive.Content> & {
+  /** Blocking dialogs stay open until the user makes a choice. */
+  showClose?: boolean;
+};
+
 export function DialogContent({
   className,
   children,
+  showClose = true,
   ...props
-}: ComponentProps<typeof DialogPrimitive.Content>) {
+}: DialogContentProps) {
   return (
     <DialogPrimitive.Portal>
       <DialogPrimitive.Overlay className="fixed inset-0 z-40 bg-foreground/45" />
@@ -26,12 +32,14 @@ export function DialogContent({
         {...props}
       >
         {children}
-        <DialogPrimitive.Close
-          aria-label="Close"
-          className="absolute right-4 top-4 inline-flex h-11 w-11 items-center justify-center rounded-control text-muted-foreground hover:bg-muted"
-        >
-          <X aria-hidden="true" className="h-5 w-5" />
-        </DialogPrimitive.Close>
+        {showClose && (
+          <DialogPrimitive.Close
+            aria-label="Close"
+            className="absolute right-4 top-4 inline-flex h-11 w-11 items-center justify-center rounded-control text-muted-foreground hover:bg-muted"
+          >
+            <X aria-hidden="true" className="h-5 w-5" />
+          </DialogPrimitive.Close>
+        )}
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
   );
