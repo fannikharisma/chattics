@@ -21,6 +21,8 @@ from app.db import build_engine, build_session_factory, get_session
 from app.main import app
 from app.repo import ensure_platform_admin, ensure_tenant, ensure_user
 
+from app.connectors import get_connector_factory
+
 _TABLES = (
     "tenants",
     "users",
@@ -87,11 +89,19 @@ def fake_ai() -> FakeAI:
 
 
 @pytest.fixture()
-def client(settings: Settings, db: Session, fake_ai: FakeAI) -> Iterator[TestClient]:
+def client(
+    settings: Settings,
+    db: Session,
+    fake_ai: FakeAI,
+    fake_connector: FakeConnector,
+) -> Iterator[TestClient]:
     """The app with its real edges replaced by test doubles and the test database."""
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_session] = lambda: db
     app.dependency_overrides[get_ai] = lambda: fake_ai
+    app.dependency_overrides[get_connector_factory] = (
+        lambda: lambda fields: fake_connector
+    )
     try:
         with TestClient(app) as test_client:
             yield test_client

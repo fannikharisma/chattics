@@ -5,16 +5,12 @@ data takes ``tenant_id`` as its first argument and filters on it inside the
 SQL — including lookups by id and platform-admin paths.
 """
 
+import json
 from dataclasses import dataclass
-from uuid import UUID
-
-from sqlalchemy import text
-from sqlalchemy.orm import Session
-
-##gemini 3.6 flash-task03-01
 from datetime import datetime
-from dataclasses import dataclass
+from typing import Any
 from uuid import UUID
+
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 ###############################
@@ -398,3 +394,91 @@ def set_tenant_admin_email(
         {"email": email, "tenant_id": tenant_id, "admin_id": admin_id},
     )
 #End of Task 03-01
+
+#Start of Task 05-03
+@dataclass(frozen=True, slots=True)
+class DataSourceRecord:
+    engine: str
+    method: str
+    fields: dict[str, str]
+    status: str
+    tested_at: datetime | None
+    last_structure: dict[str, Any]
+
+
+def get_data_source(session: Session, tenant_id: UUID) -> DataSourceRecord | None:
+    """The Tenant's one Data Source row. Tenant filter is in the SQL."""
+    row = session.execute(
+        text(
+            "select engine, method, fields, status, tested_at, last_structure "
+            "from data_sources where tenant_id = :tenant_id"
+        ),
+        {"tenant_id": tenant_id},
+    ).mappings().one_or_none()
+    return DataSourceRecord(**dict(row)) if row is not None else None
+
+
+def record_data_source_test(
+    session: Session,
+    tenant_id: UUID,
+    *,
+    engine: str,
+    method: str,
+    fields: dict[str, str],
+    fingerprint: str,
+    structure: dict[str, Any],
+) -> None:
+    """Store a passing test as pending. The caller commits."""
+    session.execute(
+        text(
+            """
+            insert into data_sources
+                (tenant_id, engine, method, fields, status,
+                 test_fingerprint, tested_at, last_structure)
+            values
+                (:tenant_id, :engine, :method, cast(:fields as jsonb),
+                 'not_connected', :fingerprint, now(), cast(:structure as jsonb))
+            on conflict (tenant_id) do update set
+                engine = excluded.engine,
+                method = excluded.method,
+                fields = excluded.fields,
+                status = 'not_connected',
+                test_fingerprint = excluded.test_fingerprint,
+                tested_at = excluded.tested_at,
+                last_structure = excluded.last_structure
+            """
+        ),
+        {
+            "tenant_id": tenant_id,
+            "engine": engine,
+            "method": method,
+            "fields": json.dumps(fields, sort_keys=True),
+            "fingerprint": fingerprint,
+            "structure": json.dumps(structure),
+        },
+    )
+
+
+def connect_data_source(
+    session: Session,
+    tenant_id: UUID,
+    *,
+    fields: dict[str, str],
+    fingerprint: str,
+) -> bool:
+    """Flip a tested row to connected. False means no matching test."""
+    result = session.execute(
+        text(
+            "update data_sources "
+            "set fields = cast(:fields as jsonb), status = 'connected', "
+            "tested_at = now() "
+            "where tenant_id = :tenant_id and test_fingerprint = :fingerprint"
+        ),
+        {
+            "tenant_id": tenant_id,
+            "fields": json.dumps(fields, sort_keys=True),
+            "fingerprint": fingerprint,
+        },
+    )
+    return result.rowcount == 1
+#End of Task 05-03
