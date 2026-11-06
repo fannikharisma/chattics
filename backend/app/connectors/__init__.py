@@ -3,8 +3,13 @@
 from collections.abc import Callable
 
 from app.connectors.base import Connector
-from app.connectors.bigquery import BigQueryConnector
+from app.connectors.bigquery import (
+    BigQueryConnector,
+    declared_connection_fields,
+)
 from app.errors import AppError
+
+
 
 ConnectorFactory = Callable[[dict[str, str]], Connector]
 

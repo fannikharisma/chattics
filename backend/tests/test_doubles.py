@@ -15,9 +15,18 @@ def test_fake_connector_declares_bigquery_like_fields(
         assert field.required is True
 
     assert by_key["engine"].kind == "select"
-    assert by_key["engine"].options == ["Google BigQuery"]
+    assert [
+        option.value
+        for option in by_key["engine"].options or []
+        if not option.disabled
+    ] == ["Google BigQuery"]
+
     assert by_key["method"].kind == "select"
-    assert by_key["method"].options == ["Local Google sign-in"]
+    assert [
+        option.value
+        for option in by_key["method"].options or []
+        if not option.disabled
+    ] == ["Local Google sign-in"]
     assert by_key["project_id"].kind == "text"
     assert by_key["dataset"].kind == "text"
 

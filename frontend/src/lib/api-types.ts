@@ -58,6 +58,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/data-source/fields": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Connection Fields
+         * @description The form is drawn from the connector, never from a frontend list.
+         */
+        get: operations["read_connection_fields_api_data_source_fields_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/data-source": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read Data Source */
+        get: operations["read_data_source_api_data_source_get"];
+        /** Save Data Source */
+        put: operations["save_data_source_api_data_source_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/data-source/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Test Data Source */
+        post: operations["test_data_source_api_data_source_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/context": {
         parameters: {
             query?: never;
@@ -184,6 +239,69 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ChecklistItemResponse */
+        ChecklistItemResponse: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Passed */
+            passed: boolean;
+            /** Detail */
+            detail?: string | null;
+        };
+        /** ConnectionFieldResponse */
+        ConnectionFieldResponse: {
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "text" | "select";
+            /** Required */
+            required: boolean;
+            /** Help Text */
+            help_text?: string | null;
+            /** Placeholder */
+            placeholder?: string | null;
+            /** Options */
+            options?: components["schemas"]["ConnectionOptionResponse"][];
+        };
+        /** ConnectionFieldsResponse */
+        ConnectionFieldsResponse: {
+            /** Fields */
+            fields: components["schemas"]["ConnectionFieldResponse"][];
+        };
+        /** ConnectionOptionResponse */
+        ConnectionOptionResponse: {
+            /** Value */
+            value: string;
+            /** Label */
+            label: string;
+            /**
+             * Disabled
+             * @default false
+             */
+            disabled: boolean;
+        };
+        /** ConnectionTestResponse */
+        ConnectionTestResponse: {
+            /** Checklist */
+            checklist: components["schemas"]["ChecklistItemResponse"][];
+            /** Tables */
+            tables: components["schemas"]["TableSummaryResponse"][];
+            /** Error */
+            error: string | null;
+            /**
+             * Status
+             * @default not_connected
+             * @constant
+             */
+            status: "not_connected";
+        };
         /** ContextIdentity */
         ContextIdentity: {
             /**
@@ -216,6 +334,26 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** DataSourceResponse */
+        DataSourceResponse: {
+            /** Engine */
+            engine: string;
+            /** Method */
+            method: string;
+            /** Fields */
+            fields: {
+                [key: string]: string;
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "not_connected" | "connected";
+            /** Tested At */
+            tested_at: string | null;
+            /** Tables */
+            tables: components["schemas"]["TableSummaryResponse"][];
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -247,6 +385,13 @@ export interface components {
             /** Token */
             token: string;
             user: components["schemas"]["UserResponse"];
+        };
+        /** TableSummaryResponse */
+        TableSummaryResponse: {
+            /** Name */
+            name: string;
+            /** Column Count */
+            column_count: number;
         };
         /** TenantCreateRequest */
         TenantCreateRequest: {
@@ -409,6 +554,116 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeResponse"];
+                };
+            };
+        };
+    };
+    read_connection_fields_api_data_source_fields_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionFieldsResponse"];
+                };
+            };
+        };
+    };
+    read_data_source_api_data_source_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataSourceResponse"] | null;
+                };
+            };
+        };
+    };
+    save_data_source_api_data_source_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataSourceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_data_source_api_data_source_test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConnectionTestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

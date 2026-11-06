@@ -88,3 +88,24 @@ class Connector(Protocol):
     def run(self, query_text: str, row_cap: int) -> ResultSet: ...
 
     def test_connection(self) -> ConnectionTestResult: ...
+
+@dataclass(frozen=True)
+class ConnectionOption:
+    """One choice in a select. Disabled choices are visible but not pickable."""
+
+    value: str
+    label: str
+    disabled: bool = False
+
+
+@dataclass(frozen=True)
+class ConnectionField:
+    """One input the Data Source form must draw."""
+
+    key: str
+    label: str
+    kind: Literal["text", "select"]
+    required: bool = True
+    help_text: str | None = None
+    placeholder: str | None = None
+    options: list[ConnectionOption] | None = None

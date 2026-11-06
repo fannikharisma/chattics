@@ -19,6 +19,7 @@ from google.cloud import bigquery
 from app.connectors.base import (
     ChecklistItem,
     ConnectionField,
+    ConnectionOption,
     ConnectionTestResult,
     DataSourceStructure,
     ResultSet,
@@ -54,6 +55,64 @@ _FAILURE_DETAILS = {
         "Read-only access could not be confirmed. Check that your account can read this dataset."
     ),
 }
+
+_FIELDS: tuple[ConnectionField, ...] = (
+    ConnectionField(
+        key="engine",
+        label="Engine",
+        kind="select",
+        options=[
+            ConnectionOption(value="Google BigQuery", label="Google BigQuery"),
+            ConnectionOption(
+                value="PostgreSQL", label="PostgreSQL (later)", disabled=True
+            ),
+            ConnectionOption(
+                value="Snowflake", label="Snowflake (later)", disabled=True
+            ),
+        ],
+    ),
+    ConnectionField(
+        key="method",
+        label="Connection method",
+        kind="select",
+        help_text=(
+            "No password or key is stored. The backend uses the Google "
+            "account signed in on the machine it runs on."
+        ),
+        options=[
+            ConnectionOption(
+                value="Local Google sign-in",
+                label="Local Google sign-in (test and demo only)",
+            ),
+            ConnectionOption(
+                value="Service-account impersonation",
+                label="Service-account impersonation (coming soon)",
+                disabled=True,
+            ),
+        ],
+    ),
+    ConnectionField(
+        key="project_id",
+        label="Project ID",
+        kind="text",
+        placeholder="my-company-analytics",
+        help_text="The Google Cloud project that holds the dataset.",
+    ),
+    ConnectionField(
+        key="dataset",
+        label="Dataset",
+        kind="text",
+        placeholder="procurement_dw",
+        help_text=(
+            "The dataset that holds your star schema. "
+            "The product gets read-only access."
+        ),
+    ),
+)
+
+def declared_connection_fields() -> list[ConnectionField]:
+    """The form's shape, readable without a live connection."""
+    return list(_FIELDS)
 
 _STRUCTURE_QUERY = """
 select t.table_name, c.column_name
@@ -96,32 +155,7 @@ class BigQueryConnector:
         return self._client_instance
 
     def declare_connection_fields(self) -> list[ConnectionField]:
-        return [
-            ConnectionField(
-                key="engine",
-                label="Engine",
-                kind="select",
-                options=["Google BigQuery"],
-            ),
-            ConnectionField(
-                key="method",
-                label="Connection method",
-                kind="select",
-                options=["Local Google sign-in"],
-            ),
-            ConnectionField(
-                key="project_id",
-                label="Project ID",
-                kind="text",
-                help_text="The Google Cloud project that holds the dataset.",
-            ),
-            ConnectionField(
-                key="dataset",
-                label="Dataset",
-                kind="text",
-                help_text="The BigQuery dataset with the tables to explore.",
-            ),
-        ]
+        return declared_connection_fields()
 
     def read_structure(self) -> DataSourceStructure:
         try:

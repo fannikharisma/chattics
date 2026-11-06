@@ -33,6 +33,15 @@ from app.repo import (
     get_data_source,
     record_data_source_test,
 )
+from pydantic import BaseModel, Field
+
+from app.connectors import (
+    SUPPORTED_ENGINE,
+    SUPPORTED_METHOD,
+    ConnectorFactory,
+    declared_connection_fields,
+    get_connector_factory,
+)
 
 router = APIRouter(prefix="/api/data-source", tags=["data-source"])
 
@@ -131,6 +140,51 @@ def _data_source_response(record: DataSourceRecord) -> DataSourceResponse:
         tables=_table_summaries(record.last_structure),
     )
 
+class ConnectionOptionResponse(BaseModel):
+    value: str
+    label: str
+    disabled: bool = False
+
+
+class ConnectionFieldResponse(BaseModel):
+    key: str
+    label: str
+    kind: Literal["text", "select"]
+    required: bool
+    help_text: str | None = None
+    placeholder: str | None = None
+    options: list[ConnectionOptionResponse] = Field(default_factory=list)
+
+
+class ConnectionFieldsResponse(BaseModel):
+    fields: list[ConnectionFieldResponse]
+
+@router.get("/fields", response_model=ConnectionFieldsResponse)
+def read_connection_fields(
+    _identity: UserRecord = Depends(require_tenant_admin),
+) -> ConnectionFieldsResponse:
+    """The form is drawn from the connector, never from a frontend list."""
+    return ConnectionFieldsResponse(
+        fields=[
+            ConnectionFieldResponse(
+                key=field.key,
+                label=field.label,
+                kind=field.kind,
+                required=field.required,
+                help_text=field.help_text,
+                placeholder=field.placeholder,
+                options=[
+                    ConnectionOptionResponse(
+                        value=option.value,
+                        label=option.label,
+                        disabled=option.disabled,
+                    )
+                    for option in field.options or []
+                ],
+            )
+            for field in declared_connection_fields()
+        ]
+    )
 
 @router.get("", response_model=DataSourceResponse | None)
 def read_data_source(

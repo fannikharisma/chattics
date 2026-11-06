@@ -275,3 +275,49 @@ class TestIsolationAndValidation:
 
         assert set(fields) == {"project_id", "dataset"}
         assert all("secret" not in value.lower() for value in fields.values())
+
+class TestConnectionFields:
+    def test_fields_are_declared_by_the_connector(self, client, db):
+        tenant = make_tenant(db)
+        token = _tenant_admin_token(client, db, tenant)
+
+        response = client.get("/api/data-source/fields", headers=auth(token))
+
+        assert response.status_code == 200
+        fields = response.json()["fields"]
+        assert [field["key"] for field in fields] == [
+            "engine",
+            "method",
+            "project_id",
+            "dataset",
+        ]
+
+        engine = fields[0]
+        assert engine["kind"] == "select"
+        assert [
+            option["label"]
+            for option in engine["options"]
+            if not option["disabled"]
+        ] == ["Google BigQuery"]
+        assert "PostgreSQL (later)" in [
+            option["label"]
+            for option in engine["options"]
+            if option["disabled"]
+        ]
+
+        method = fields[1]
+        assert method["options"][0]["label"] == (
+            "Local Google sign-in (test and demo only)"
+        )
+
+        assert fields[2]["kind"] == "text"
+        assert fields[2]["placeholder"] == "my-company-analytics"
+
+    def test_fields_require_tenant_admin(self, client, db):
+        tenant = make_tenant(db)
+        user_id = make_user(db, tenant, "user", "omar@northwind.test")
+        token = signin_as(db, client, user_id)
+
+        response = client.get("/api/data-source/fields", headers=auth(token))
+
+        assert response.status_code == 403
