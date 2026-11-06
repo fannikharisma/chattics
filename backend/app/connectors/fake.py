@@ -12,12 +12,37 @@ from sqlglot import exp
 from sqlglot.errors import ParseError
 
 from app.connectors.base import (
+    ChecklistItem,
     ConnectionField,
+    ConnectionTestResult,
     DataSourceStructure,
     ResultSet,
     TableDefinition,
+    TableSummary,
 )
 from app.errors import AppError
+
+_CHECKS: tuple[tuple[str, str], ...] = (
+    ("signed_in", "Signed in with Google"),
+    ("project_found", "Project found"),
+    ("dataset_found", "Dataset found"),
+    ("read_only", "Read-only access confirmed"),
+)
+
+_FAILURE_DETAILS = {
+    "signed_in": (
+        "Sign in with Google (gcloud auth application-default login) and try again."
+    ),
+    "project_found": (
+        "The project was not found. Check the project ID and that your account can open it."
+    ),
+    "dataset_found": (
+        "The dataset was not found. Check the dataset name and that it exists in the project."
+    ),
+    "read_only": (
+        "Read-only access could not be confirmed. Check that your account can read this dataset."
+    ),
+}
 
 _TABLES: dict[str, tuple[list[str], list[list[Any]]]] = {
     "dim_vendor": (
@@ -60,8 +85,15 @@ _TABLES: dict[str, tuple[list[str], list[list[Any]]]] = {
 
 
 class FakeConnector:
-    """BigQuery-shaped fixture: same contract, no network, deterministic rows."""
+    """BigQuery-shaped fixture: same contract, no network, deterministic rows.
 
+    ``fail_at`` stops a test connection at one checklist key, so tests can prove
+    partial failures without touching a real warehouse.
+    """
+
+    def __init__(self, fail_at: str | None = None) -> None:
+        self._fail_at = fail_at
+    
     def declare_connection_fields(self) -> list[ConnectionField]:
         return [
             ConnectionField(
@@ -76,8 +108,18 @@ class FakeConnector:
                 kind="select",
                 options=["Local Google sign-in"],
             ),
-            ConnectionField(key="project_id", label="Project ID", kind="text"),
-            ConnectionField(key="dataset", label="Dataset", kind="text"),
+            ConnectionField(
+                key="project_id",
+                label="Project ID",
+                kind="text",
+                help_text="The Google Cloud project that holds the dataset.",
+            ),
+            ConnectionField(
+                key="dataset",
+                label="Dataset",
+                kind="text",
+                help_text="The BigQuery dataset with the tables to explore.",
+            ),
         ]
 
     def read_structure(self) -> DataSourceStructure:
@@ -94,7 +136,7 @@ class FakeConnector:
     def dry_run(self, query_text: str) -> None:
         self._read_order(query_text)
 
-    def run(self, query_text: str) -> ResultSet:
+    def run(self, query_text: str, row_cap: int) -> ResultSet:
         statement, tables = self._read_order(query_text)
         if len(tables) != 1:
             raise AppError(
@@ -105,9 +147,27 @@ class FakeConnector:
         columns, rows = _TABLES[tables[0].name.lower()]
         selected = self._projection(statement, columns)
         indexes = [columns.index(column) for column in selected]
-        return ResultSet(
-            columns=selected,
-            rows=[[row[index] for index in indexes] for row in rows],
+        projected = [[row[index] for index in indexes] for row in rows]
+        return ResultSet(columns=selected, rows=projected[:row_cap])
+
+    def test_connection(self) -> ConnectionTestResult:
+        checklist: list[ChecklistItem] = []
+        for key, label in _CHECKS:
+            if key == self._fail_at:
+                detail = _FAILURE_DETAILS[key]
+                checklist.append(
+                    ChecklistItem(key=key, label=label, passed=False, detail=detail)
+                )
+                return ConnectionTestResult(
+                    checklist=checklist, tables=[], error=detail
+                )
+            checklist.append(ChecklistItem(key=key, label=label, passed=True))
+        return ConnectionTestResult(
+            checklist=checklist,
+            tables=[
+                TableSummary(name=name, column_count=len(columns))
+                for name, (columns, _rows) in _TABLES.items()
+            ],
         )
 
     def _read_order(self, query_text: str) -> tuple[exp.Expression, list[exp.Table]]:
